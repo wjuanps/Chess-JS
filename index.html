@@ -1,0 +1,1627 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xadrez JS (UI + Regras + IA)</title>
+  <style>
+    :root{
+      --light:#f0d9b5;
+      --dark:#b58863;
+      --sel:#ffd54a;
+      --hint:#2ecc71;
+      --hint2:#27ae60;
+      --cap:#e74c3c;
+      --cap2:#c0392b;
+      --border:#222;
+      --bg:#111;
+      --panel:#1b1b1b;
+      --text:#eaeaea;
+      --muted:#bdbdbd;
+      --btn:#2b2b2b;
+      --btn2:#3a3a3a;
+      --danger:#c0392b;
+      --accent:#4aa3ff;
+    }
+    body{
+      margin:0;
+      background:linear-gradient(120deg,#0f0f0f,#151515);
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      display:flex;
+      min-height:100vh;
+      align-items:flex-start;
+      justify-content:center;
+    }
+    .wrap{
+      display:grid;
+      grid-template-columns:auto 340px;
+      gap:18px;
+      padding:18px;
+      max-width:1100px;
+      width:100%;
+      box-sizing:border-box;
+    }
+    .board-card{
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      padding:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+    }
+    .panel{
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      padding:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+      position:sticky;
+      top:12px;
+      height:fit-content;
+    }
+    .title{
+      font-size:18px;
+      margin:0 0 10px 0;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .subtitle{
+      margin:0 0 12px 0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
+    }
+
+    /* Board grid: 8x8 + coordinate gutters */
+    .board{
+      display:grid;
+      grid-template-columns: 24px repeat(8, 64px);
+      grid-template-rows: repeat(8, 64px) 24px;
+      user-select:none;
+      border-radius:12px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.12);
+    }
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr; }
+      .panel{ position:relative; top:auto; }
+      .board{
+        grid-template-columns: 24px repeat(8, 10.5vw);
+        grid-template-rows: repeat(8, 10.5vw) 24px;
+      }
+    }
+
+    .coord-left, .coord-bottom{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      color:rgba(255,255,255,0.65);
+      background:rgba(0,0,0,0.35);
+    }
+    .sq{
+      width:64px; height:64px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:42px;
+      cursor:pointer;
+      position:relative;
+    }
+    .sq.light{ background:var(--light); color:#111; }
+    .sq.dark{ background:var(--dark); color:#111; }
+
+    .sq.selected::after{
+      content:"";
+      position:absolute; inset:0;
+      outline:4px solid rgba(255,213,74,0.8);
+      outline-offset:-4px;
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25);
+      pointer-events:none;
+    }
+    .sq.hint::before{
+      content:"";
+      position:absolute;
+      width:18px; height:18px;
+      border-radius:50%;
+      background:rgba(46,204,113,0.75);
+      box-shadow:0 0 0 3px rgba(0,0,0,0.15);
+      pointer-events:none;
+    }
+    .sq.hint.capture::before{
+      background:rgba(231,76,60,0.80);
+    }
+    .sq.incheck{
+      animation: pulse 0.9s ease-in-out infinite;
+    }
+    @keyframes pulse{
+      0%,100%{ box-shadow: inset 0 0 0 0 rgba(231,76,60,0); }
+      50%{ box-shadow: inset 0 0 0 6px rgba(231,76,60,0.45); }
+    }
+
+    .controls{
+      display:grid;
+      gap:10px;
+      margin-top:10px;
+    }
+    .row{
+      display:flex; gap:10px; flex-wrap:wrap;
+    }
+    button{
+      background:var(--btn);
+      border:1px solid rgba(255,255,255,0.12);
+      color:var(--text);
+      padding:9px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:14px;
+      transition: transform 0.05s ease, background 0.15s ease;
+    }
+    button:hover{ background:var(--btn2); }
+    button:active{ transform: translateY(1px); }
+    button.danger{ background:rgba(192,57,43,0.25); border-color:rgba(192,57,43,0.35); }
+    button.danger:hover{ background:rgba(192,57,43,0.35); }
+
+    select, input[type="number"]{
+      background:rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.15);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:10px;
+      font-size:14px;
+      outline:none;
+    }
+    label{
+      font-size:12px;
+      color:rgba(255,255,255,0.75);
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top:8px;
+    }
+    .status{
+      margin-top:10px;
+      padding:10px;
+      border-radius:12px;
+      background:rgba(0,0,0,0.28);
+      border:1px solid rgba(255,255,255,0.08);
+      font-size:13px;
+      line-height:1.35;
+    }
+    .status b{ color:var(--accent); }
+    .moves{
+      margin-top:12px;
+      padding:10px;
+      border-radius:12px;
+      background:rgba(0,0,0,0.28);
+      border:1px solid rgba(255,255,255,0.08);
+      max-height:330px;
+      overflow:auto;
+    }
+    .moves h3{
+      margin:0 0 8px 0;
+      font-size:13px;
+      color:rgba(255,255,255,0.85);
+    }
+    .moves ol{
+      margin:0;
+      padding-left:18px;
+      color:rgba(255,255,255,0.88);
+      font-size:13px;
+    }
+    .fen{
+      margin-top:10px;
+      padding:10px;
+      border-radius:12px;
+      background:rgba(0,0,0,0.28);
+      border:1px solid rgba(255,255,255,0.08);
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+      font-size:12px;
+      color:rgba(255,255,255,0.86);
+      word-break:break-all;
+    }
+    .hintline{
+      margin-top:10px;
+      color:rgba(255,255,255,0.68);
+      font-size:12px;
+      line-height:1.35;
+    }
+    .small{
+      font-size:12px;
+      color:rgba(255,255,255,0.72);
+    }
+    .badge{
+      font-size:12px;
+      padding:3px 8px;
+      border-radius:999px;
+      background:rgba(74,163,255,0.15);
+      border:1px solid rgba(74,163,255,0.3);
+      color:rgba(198,228,255,0.95);
+    }
+
+    /* Modal promo */
+    .modal-backdrop{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+    }
+    .modal{
+      width:min(420px,92vw);
+      background:rgba(24,24,24,0.98);
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:14px;
+      padding:14px;
+      box-shadow:0 20px 50px rgba(0,0,0,0.6);
+    }
+    .modal h2{
+      margin:0 0 10px 0;
+      font-size:16px;
+    }
+    .promo-choices{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .promo-choices button{
+      width:90px;
+      height:74px;
+      font-size:34px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="board-card">
+      <div class="title">
+        <div style="display:flex;gap:10px;align-items:center">
+          <span>♚ Xadrez JS</span>
+          <span class="badge" id="modeBadge">Humano vs IA</span>
+        </div>
+        <span class="small">Unicode • Regras completas • IA</span>
+      </div>
+      <div class="board" id="board"></div>
+      <div class="hintline">
+        Dica: clique numa peça do lado a jogar → clique num destino verde (ou vermelho para captura).
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="subtitle">
+        Modo, profundidade da IA e controles. O estado interno usa <b>FEN</b>. Você pode testar no console:
+        <code>Chess.debugTests()</code>.
+      </p>
+
+      <div class="controls">
+        <label>
+          Modo de jogo
+          <select id="modeSelect">
+            <option value="hva" selected>Humano vs IA (IA pretas)</option>
+            <option value="hvh">Humano vs Humano</option>
+            <option value="avh">IA vs Humano (IA brancas)</option>
+            <option value="ava">IA vs IA</option>
+          </select>
+        </label>
+
+        <label>
+          Profundidade IA (plies)
+          <select id="depthSelect">
+            <option value="2">2 (rápido)</option>
+            <option value="3" selected>3 (padrão)</option>
+            <option value="4">4 (mais forte)</option>
+          </select>
+        </label>
+
+        <div class="row">
+          <button id="newBtn">Novo jogo</button>
+          <button id="undoBtn">Desfazer</button>
+          <button id="redoBtn">Refazer</button>
+          <button id="flipBtn">Virar tabuleiro</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="moves">
+          <h3>Histórico</h3>
+          <ol id="moveList"></ol>
+        </div>
+
+        <div class="fen" id="fenBox"></div>
+
+        <div class="hintline">
+          IA: minimax + alpha-beta, ordenação MVV-LVA e quiescence simples (somente capturas).
+          Ajuste profundidade acima.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promotion Modal -->
+  <div class="modal-backdrop" id="promoBackdrop">
+    <div class="modal">
+      <h2>Escolha a peça para promoção</h2>
+      <div class="promo-choices" id="promoChoices"></div>
+      <div class="hintline">A promoção é obrigatória ao atingir a última fileira.</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  /**********************************************************************
+   * Utilitários: coordenadas, peças, FEN
+   **********************************************************************/
+  const FILES = "abcdefgh";
+  const RANKS = "12345678";
+  const PIECE_UNICODE = {
+    'P':'♙','N':'♘','B':'♗','R':'♖','Q':'♕','K':'♔',
+    'p':'♟','n':'♞','b':'♝','r':'♜','q':'♛','k':'♚'
+  };
+
+  function sqToCoord(sq){ // 0..63 => "e4"
+    const f = sq % 8;
+    const r = Math.floor(sq / 8);
+    return FILES[f] + (8 - r);
+  }
+  function coordToSq(coord){ // "e4" => 0..63
+    const f = FILES.indexOf(coord[0]);
+    const rank = parseInt(coord[1],10);
+    const r = 8 - rank;
+    return r*8 + f;
+  }
+  function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+  function rcToSq(r,c){ return r*8+c; }
+  function sqToRC(sq){ return [Math.floor(sq/8), sq%8]; }
+  function isWhitePiece(p){ return p && p === p.toUpperCase(); }
+  function isBlackPiece(p){ return p && p === p.toLowerCase(); }
+
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  /**********************************************************************
+   * Board: estado, FEN, push/pop para undo/redo
+   **********************************************************************/
+  const Board = {
+    // Representação: array 64 com "P","k", etc ou null
+    state: {
+      cells: Array(64).fill(null),
+      sideToMove: 'w', // 'w' | 'b'
+      castling: { K:true, Q:true, k:true, q:true }, // direitos de roque
+      enPassant: null, // square index alvo de en passant (onde o peão capturaria)
+      halfmove: 0,
+      fullmove: 1
+    },
+    history: [], // stack de snapshots para undo
+    future: [],  // stack para redo
+
+    reset(){
+      // posição inicial
+      const s = this.state;
+      s.cells = Array(64).fill(null);
+      const back = "RNBQKBNR";
+      for(let i=0;i<8;i++){
+        s.cells[rcToSq(0,i)] = back[i].toLowerCase();
+        s.cells[rcToSq(1,i)] = 'p';
+        s.cells[rcToSq(6,i)] = 'P';
+        s.cells[rcToSq(7,i)] = back[i];
+      }
+      s.sideToMove='w';
+      s.castling={K:true,Q:true,k:true,q:true};
+      s.enPassant=null;
+      s.halfmove=0;
+      s.fullmove=1;
+
+      this.history = [];
+      this.future = [];
+    },
+
+    snapshot(){
+      return {
+        cells: this.state.cells.slice(),
+        sideToMove: this.state.sideToMove,
+        castling: {...this.state.castling},
+        enPassant: this.state.enPassant,
+        halfmove: this.state.halfmove,
+        fullmove: this.state.fullmove
+      };
+    },
+
+    restore(snap){
+      this.state.cells = snap.cells.slice();
+      this.state.sideToMove = snap.sideToMove;
+      this.state.castling = {...snap.castling};
+      this.state.enPassant = snap.enPassant;
+      this.state.halfmove = snap.halfmove;
+      this.state.fullmove = snap.fullmove;
+    },
+
+    pushHistory(){
+      this.history.push(this.snapshot());
+      // qualquer nova jogada invalida o redo
+      this.future = [];
+    },
+
+    undo(){
+      if(this.history.length === 0) return false;
+      this.future.push(this.snapshot());
+      const snap = this.history.pop();
+      this.restore(snap);
+      return true;
+    },
+
+    redo(){
+      if(this.future.length === 0) return false;
+      this.history.push(this.snapshot());
+      const snap = this.future.pop();
+      this.restore(snap);
+      return true;
+    },
+
+    fen(){
+      // Gera FEN do estado atual (mínimo correto: peças, lado, roques, ep, half/full)
+      const s = this.state;
+      let rows = [];
+      for(let r=0;r<8;r++){
+        let empty=0, row="";
+        for(let c=0;c<8;c++){
+          const p = s.cells[rcToSq(r,c)];
+          if(!p) empty++;
+          else{
+            if(empty){ row += empty; empty=0; }
+            row += p;
+          }
+        }
+        if(empty) row += empty;
+        rows.push(row);
+      }
+      const placement = rows.join("/");
+      const stm = s.sideToMove;
+      const cast =
+        (s.castling.K ? "K":"") + (s.castling.Q ? "Q":"") +
+        (s.castling.k ? "k":"") + (s.castling.q ? "q":"");
+      const castling = cast.length ? cast : "-";
+      const ep = s.enPassant === null ? "-" : sqToCoord(s.enPassant);
+      return `${placement} ${stm} ${castling} ${ep} ${s.halfmove} ${s.fullmove}`;
+    }
+  };
+
+  /**********************************************************************
+   * Move structure
+   * from, to (0..63), piece, capture, promotion, flags:
+   *  - 'ep' en passant
+   *  - 'castleK' / 'castleQ'
+   *  - 'promo'
+   *  - 'double' (pawn double push)
+   **********************************************************************/
+  function makeMove({from,to,piece,capture=null,promotion=null,flag=null}){
+    return {from,to,piece,capture,promotion,flag};
+  }
+
+  /**********************************************************************
+   * Rules & MoveGen: geração de pseudo-legais e filtragem por cheque
+   **********************************************************************/
+  const Rules = {
+    pieceAt(sq, st){ return st.cells[sq]; },
+    setPiece(sq, p, st){ st.cells[sq] = p; },
+
+    kingSquare(color, st){
+      const target = color === 'w' ? 'K' : 'k';
+      for(let i=0;i<64;i++) if(st.cells[i] === target) return i;
+      return null;
+    },
+
+    // Verifica se 'color' está em cheque
+    inCheck(color, st){
+      const ksq = this.kingSquare(color, st);
+      if(ksq === null) return false;
+      const attacker = (color === 'w') ? 'b' : 'w';
+      return MoveGen.isSquareAttacked(ksq, attacker, st);
+    },
+
+    // Aplica um movimento (assume pseudo-legal). Retorna info para desfazer se necessário.
+    applyMove(move, st){
+      const prev = {
+        castling: {...st.castling},
+        enPassant: st.enPassant,
+        halfmove: st.halfmove,
+        fullmove: st.fullmove,
+        capturedPiece: null
+      };
+
+      const {from,to,piece,flag,promotion} = move;
+
+      // halfmove clock
+      const isPawn = (piece.toLowerCase() === 'p');
+      const capture = (move.capture !== null);
+
+      if(isPawn || capture) st.halfmove = 0;
+      else st.halfmove++;
+
+      // enPassant reset (default)
+      st.enPassant = null;
+
+      // Remove peça da origem
+      this.setPiece(from, null, st);
+
+      // Capturas (inclui en passant)
+      if(flag === 'ep'){
+        // captura o peão "atrás" do alvo
+        const [tr, tc] = sqToRC(to);
+        const capSq = (st.sideToMove === 'w') ? rcToSq(tr+1, tc) : rcToSq(tr-1, tc);
+        prev.capturedPiece = st.cells[capSq];
+        this.setPiece(capSq, null, st);
+      } else {
+        prev.capturedPiece = st.cells[to];
+      }
+
+      // Roque: mover a torre também
+      if(flag === 'castleK' || flag === 'castleQ'){
+        // Rei vai para 'to'. Torre depende do lado
+        if(piece === 'K'){
+          if(flag === 'castleK'){
+            // torre h1 -> f1
+            this.setPiece(rcToSq(7,7), null, st);
+            this.setPiece(rcToSq(7,5), 'R', st);
+          } else {
+            // torre a1 -> d1
+            this.setPiece(rcToSq(7,0), null, st);
+            this.setPiece(rcToSq(7,3), 'R', st);
+          }
+          st.castling.K = false; st.castling.Q = false;
+        } else if(piece === 'k'){
+          if(flag === 'castleK'){
+            // torre h8 -> f8
+            this.setPiece(rcToSq(0,7), null, st);
+            this.setPiece(rcToSq(0,5), 'r', st);
+          } else {
+            // torre a8 -> d8
+            this.setPiece(rcToSq(0,0), null, st);
+            this.setPiece(rcToSq(0,3), 'r', st);
+          }
+          st.castling.k = false; st.castling.q = false;
+        }
+      }
+
+      // Coloca peça no destino (promoção substitui)
+      let placed = piece;
+      if(flag === 'promo' && promotion){
+        placed = promotion;
+      }
+      this.setPiece(to, placed, st);
+
+      // Se foi double pawn push, marca enPassant
+      if(flag === 'double'){
+        const [fr, fc] = sqToRC(from);
+        const [tr, tc] = sqToRC(to);
+        // square "atrás" do peão, onde adversário capturaria
+        const epR = (fr + tr)/2;
+        st.enPassant = rcToSq(epR, fc);
+      }
+
+      // Atualiza direitos de roque ao mover rei/torre ou capturar torre
+      this.updateCastlingRights(move, prev.capturedPiece, st);
+
+      // Atualiza lado e fullmove
+      if(st.sideToMove === 'b') st.fullmove++;
+      st.sideToMove = (st.sideToMove === 'w') ? 'b' : 'w';
+
+      return prev;
+    },
+
+    updateCastlingRights(move, captured, st){
+      const {from,to,piece} = move;
+      // Se rei moveu
+      if(piece === 'K'){ st.castling.K = false; st.castling.Q = false; }
+      if(piece === 'k'){ st.castling.k = false; st.castling.q = false; }
+
+      // Se torre moveu da casa original
+      if(piece === 'R'){
+        if(from === rcToSq(7,0)) st.castling.Q = false;
+        if(from === rcToSq(7,7)) st.castling.K = false;
+      }
+      if(piece === 'r'){
+        if(from === rcToSq(0,0)) st.castling.q = false;
+        if(from === rcToSq(0,7)) st.castling.k = false;
+      }
+
+      // Se capturou torre na casa original
+      if(captured === 'R'){
+        if(to === rcToSq(7,0)) st.castling.Q = false;
+        if(to === rcToSq(7,7)) st.castling.K = false;
+      }
+      if(captured === 'r'){
+        if(to === rcToSq(0,0)) st.castling.q = false;
+        if(to === rcToSq(0,7)) st.castling.k = false;
+      }
+    },
+
+    // Desfaz um movimento usando snapshot anterior (mais simples e robusto na UI),
+    // mas para IA nós aplicamos "no estado clonado" e não precisamos desfazer.
+    // Aqui mantemos o applyMove puro, e a UI usa snapshots/undo do Board.
+
+    isInsufficientMaterial(st){
+      // Empate por material insuficiente (mínimo):
+      // - K vs K
+      // - K+N vs K
+      // - K+B vs K
+      // - K+B vs K+B com bispos na mesma cor (opcional; faremos versão simples + essa)
+      const pieces = st.cells.filter(Boolean);
+      // Remove reis
+      const nonKings = pieces.filter(p => p.toLowerCase() !== 'k');
+      if(nonKings.length === 0) return true;
+
+      // Conta por tipo
+      const counts = { p:0,n:0,b:0,r:0,q:0 };
+      for(const p of nonKings) counts[p.toLowerCase()]++;
+
+      // Se houver peões, torres ou damas -> não insuficiente
+      if(counts.p>0 || counts.r>0 || counts.q>0) return false;
+
+      // Somente menores
+      const minors = counts.n + counts.b;
+      if(minors === 1) return true; // K+N vs K ou K+B vs K
+
+      // Bispo + bispo apenas: verificar mesma cor de casa
+      if(counts.n === 0 && counts.b === 2){
+        // encontra as casas dos bispos
+        const bishops = [];
+        for(let i=0;i<64;i++){
+          const p = st.cells[i];
+          if(p && p.toLowerCase()==='b') bishops.push(i);
+        }
+        // cor da casa: (r+c)%2
+        const colorSq = (sq)=>{ const [r,c]=sqToRC(sq); return (r+c)%2; };
+        if(bishops.length === 2){
+          if(colorSq(bishops[0]) === colorSq(bishops[1])) return true;
+        }
+      }
+
+      return false;
+    }
+  };
+
+  const MoveGen = {
+    // Checagem de ataque (para validar roque e cheque)
+    isSquareAttacked(targetSq, byColor, st){
+      // byColor 'w' ou 'b'
+      // Geramos ataques pseudo-legais do lado atacante (sem considerar auto-cheque)
+      const cells = st.cells;
+
+      const isEnemy = (p) => {
+        if(!p) return false;
+        return (byColor === 'w') ? isWhitePiece(p) : isBlackPiece(p);
+      };
+
+      const [tr, tc] = sqToRC(targetSq);
+
+      // Peões: ataques diagonais
+      if(byColor === 'w'){
+        const r = tr+1;
+        for(const dc of [-1, +1]){
+          const c = tc + dc;
+          if(inBounds(r,c)){
+            const p = cells[rcToSq(r,c)];
+            if(p === 'P') return true;
+          }
+        }
+      } else {
+        const r = tr-1;
+        for(const dc of [-1, +1]){
+          const c = tc + dc;
+          if(inBounds(r,c)){
+            const p = cells[rcToSq(r,c)];
+            if(p === 'p') return true;
+          }
+        }
+      }
+
+      // Cavalo
+      const knightD = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+      for(const [dr,dc] of knightD){
+        const r = tr+dr, c = tc+dc;
+        if(inBounds(r,c)){
+          const p = cells[rcToSq(r,c)];
+          if(isEnemy(p) && p.toLowerCase()==='n') return true;
+        }
+      }
+
+      // Rei adjacente
+      for(let dr=-1;dr<=1;dr++){
+        for(let dc=-1;dc<=1;dc++){
+          if(dr===0 && dc===0) continue;
+          const r=tr+dr, c=tc+dc;
+          if(inBounds(r,c)){
+            const p=cells[rcToSq(r,c)];
+            if(isEnemy(p) && p.toLowerCase()==='k') return true;
+          }
+        }
+      }
+
+      // Deslizantes: bispo/dama (diagonais), torre/dama (retas)
+      const diagDirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+      for(const [dr,dc] of diagDirs){
+        let r=tr+dr, c=tc+dc;
+        while(inBounds(r,c)){
+          const p = cells[rcToSq(r,c)];
+          if(p){
+            if(isEnemy(p) && (p.toLowerCase()==='b' || p.toLowerCase()==='q')) return true;
+            break;
+          }
+          r+=dr; c+=dc;
+        }
+      }
+      const orthoDirs = [[-1,0],[1,0],[0,-1],[0,1]];
+      for(const [dr,dc] of orthoDirs){
+        let r=tr+dr, c=tc+dc;
+        while(inBounds(r,c)){
+          const p = cells[rcToSq(r,c)];
+          if(p){
+            if(isEnemy(p) && (p.toLowerCase()==='r' || p.toLowerCase()==='q')) return true;
+            break;
+          }
+          r+=dr; c+=dc;
+        }
+      }
+
+      return false;
+    },
+
+    generatePseudoMoves(st){
+      const moves = [];
+      const side = st.sideToMove;
+      const usWhite = side === 'w';
+
+      const isUs = (p) => p && (usWhite ? isWhitePiece(p) : isBlackPiece(p));
+      const isThem = (p) => p && (usWhite ? isBlackPiece(p) : isWhitePiece(p));
+
+      for(let sq=0;sq<64;sq++){
+        const p = st.cells[sq];
+        if(!isUs(p)) continue;
+
+        const [r,c] = sqToRC(sq);
+        const pt = p.toLowerCase();
+
+        if(pt === 'p'){
+          const dir = usWhite ? -1 : +1;
+          const startRank = usWhite ? 6 : 1;
+          const promoRank = usWhite ? 0 : 7;
+
+          // 1 passo
+          const r1 = r + dir;
+          if(inBounds(r1,c)){
+            const to1 = rcToSq(r1,c);
+            if(!st.cells[to1]){
+              // promoção?
+              if(r1 === promoRank){
+                for(const promo of usWhite ? ['Q','R','B','N'] : ['q','r','b','n']){
+                  moves.push(makeMove({from:sq,to:to1,piece:p,promotion:promo,flag:'promo'}));
+                }
+              } else {
+                moves.push(makeMove({from:sq,to:to1,piece:p}));
+              }
+
+              // 2 passos
+              if(r === startRank){
+                const r2 = r + dir*2;
+                const to2 = rcToSq(r2,c);
+                if(inBounds(r2,c) && !st.cells[to2]){
+                  moves.push(makeMove({from:sq,to:to2,piece:p,flag:'double'}));
+                }
+              }
+            }
+          }
+
+          // capturas diagonais + en passant
+          for(const dc of [-1,+1]){
+            const rc = c + dc;
+            const rr = r + dir;
+            if(!inBounds(rr,rc)) continue;
+            const to = rcToSq(rr,rc);
+            const target = st.cells[to];
+
+            // captura normal
+            if(target && isThem(target)){
+              if(rr === promoRank){
+                for(const promo of usWhite ? ['Q','R','B','N'] : ['q','r','b','n']){
+                  moves.push(makeMove({from:sq,to,piece:p,capture:target,promotion:promo,flag:'promo'}));
+                }
+              } else {
+                moves.push(makeMove({from:sq,to,piece:p,capture:target}));
+              }
+            }
+
+            // en passant: alvo é st.enPassant (casa vazia)
+            if(st.enPassant !== null && to === st.enPassant){
+              // garantir que há um peão adversário adjacente na fileira atual
+              const capSq = usWhite ? rcToSq(r, rc) : rcToSq(r, rc);
+              const behind = st.cells[capSq];
+              if(behind && behind.toLowerCase()==='p' && isThem(behind)){
+                moves.push(makeMove({from:sq,to,piece:p,capture:behind,flag:'ep'}));
+              }
+            }
+          }
+        }
+
+        else if(pt === 'n'){
+          const D = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+          for(const [dr,dc] of D){
+            const rr=r+dr, cc=c+dc;
+            if(!inBounds(rr,cc)) continue;
+            const to=rcToSq(rr,cc);
+            const t=st.cells[to];
+            if(!t) moves.push(makeMove({from:sq,to,piece:p}));
+            else if(isThem(t)) moves.push(makeMove({from:sq,to,piece:p,capture:t}));
+          }
+        }
+
+        else if(pt === 'b' || pt === 'r' || pt === 'q'){
+          const dirs = [];
+          if(pt==='b' || pt==='q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+          if(pt==='r' || pt==='q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+          for(const [dr,dc] of dirs){
+            let rr=r+dr, cc=c+dc;
+            while(inBounds(rr,cc)){
+              const to=rcToSq(rr,cc);
+              const t=st.cells[to];
+              if(!t){
+                moves.push(makeMove({from:sq,to,piece:p}));
+              } else {
+                if(isThem(t)) moves.push(makeMove({from:sq,to,piece:p,capture:t}));
+                break;
+              }
+              rr+=dr; cc+=dc;
+            }
+          }
+        }
+
+        else if(pt === 'k'){
+          for(let dr=-1;dr<=1;dr++){
+            for(let dc=-1;dc<=1;dc++){
+              if(dr===0 && dc===0) continue;
+              const rr=r+dr, cc=c+dc;
+              if(!inBounds(rr,cc)) continue;
+              const to=rcToSq(rr,cc);
+              const t=st.cells[to];
+              if(!t) moves.push(makeMove({from:sq,to,piece:p}));
+              else if(isThem(t)) moves.push(makeMove({from:sq,to,piece:p,capture:t}));
+            }
+          }
+
+          // Roque: validações: direitos, casas vazias, não estar em cheque,
+          // e não passar/terminar em casas atacadas.
+          if(usWhite){
+            if(st.castling.K){
+              // e1 -> g1; casas f1,g1 vazias; e1,f1,g1 não atacadas
+              const e1 = rcToSq(7,4), f1 = rcToSq(7,5), g1 = rcToSq(7,6), h1=rcToSq(7,7);
+              if(sq===e1 && st.cells[f1]==null && st.cells[g1]==null && st.cells[h1]==='R'){
+                if(!this.isSquareAttacked(e1,'b',st) && !this.isSquareAttacked(f1,'b',st) && !this.isSquareAttacked(g1,'b',st)){
+                  moves.push(makeMove({from:e1,to:g1,piece:'K',flag:'castleK'}));
+                }
+              }
+            }
+            if(st.castling.Q){
+              // e1 -> c1; d1,c1,b1 vazias; e1,d1,c1 não atacadas; torre a1
+              const e1=rcToSq(7,4), d1=rcToSq(7,3), c1=rcToSq(7,2), b1=rcToSq(7,1), a1=rcToSq(7,0);
+              if(sq===e1 && st.cells[d1]==null && st.cells[c1]==null && st.cells[b1]==null && st.cells[a1]==='R'){
+                if(!this.isSquareAttacked(e1,'b',st) && !this.isSquareAttacked(d1,'b',st) && !this.isSquareAttacked(c1,'b',st)){
+                  moves.push(makeMove({from:e1,to:c1,piece:'K',flag:'castleQ'}));
+                }
+              }
+            }
+          } else {
+            if(st.castling.k){
+              const e8=rcToSq(0,4), f8=rcToSq(0,5), g8=rcToSq(0,6), h8=rcToSq(0,7);
+              if(sq===e8 && st.cells[f8]==null && st.cells[g8]==null && st.cells[h8]==='r'){
+                if(!this.isSquareAttacked(e8,'w',st) && !this.isSquareAttacked(f8,'w',st) && !this.isSquareAttacked(g8,'w',st)){
+                  moves.push(makeMove({from:e8,to:g8,piece:'k',flag:'castleK'}));
+                }
+              }
+            }
+            if(st.castling.q){
+              const e8=rcToSq(0,4), d8=rcToSq(0,3), c8=rcToSq(0,2), b8=rcToSq(0,1), a8=rcToSq(0,0);
+              if(sq===e8 && st.cells[d8]==null && st.cells[c8]==null && st.cells[b8]==null && st.cells[a8]==='r'){
+                if(!this.isSquareAttacked(e8,'w',st) && !this.isSquareAttacked(d8,'w',st) && !this.isSquareAttacked(c8,'w',st)){
+                  moves.push(makeMove({from:e8,to:c8,piece:'k',flag:'castleQ'}));
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return moves;
+    },
+
+    // Filtra pseudo-legais para legais (não deixa o próprio rei em cheque)
+    generateLegalMoves(st){
+      const pseudo = this.generatePseudoMoves(st);
+      const legal = [];
+      const color = st.sideToMove;
+      for(const mv of pseudo){
+        const st2 = clone(st);
+        Rules.applyMove(mv, st2);
+        if(!Rules.inCheck(color, st2)){
+          legal.push(mv);
+        }
+      }
+      return legal;
+    }
+  };
+
+  /**********************************************************************
+   * Engine: avaliação, minimax+alpha-beta, quiescence
+   **********************************************************************/
+  const Engine = {
+    pieceValue(p){
+      switch(p.toLowerCase()){
+        case 'p': return 100;
+        case 'n': return 320;
+        case 'b': return 330;
+        case 'r': return 500;
+        case 'q': return 900;
+        case 'k': return 20000;
+        default: return 0;
+      }
+    },
+
+    // Bônus simples de centro (d4,e4,d5,e5), e anel (c3..f6)
+    centerBonus(sq){
+      const [r,c] = sqToRC(sq);
+      const inCore = (r>=3 && r<=4 && c>=3 && c<=4);
+      const inRing = (r>=2 && r<=5 && c>=2 && c<=5);
+      if(inCore) return 12;
+      if(inRing) return 5;
+      return 0;
+    },
+
+    kingSafetyPenalty(color, st){
+      // Heurística simples: penaliza rei fora do "abrigo" (muito aberto) e
+      // penaliza se peças pesadas inimigas têm muitas linhas abertas ao redor.
+      // Mantemos leve para performance.
+      const ksq = Rules.kingSquare(color, st);
+      if(ksq==null) return 0;
+      const [r,c]=sqToRC(ksq);
+      // Quanto mais central, mais penaliza (no meio do jogo)
+      const distToCenter = Math.abs(r-3.5)+Math.abs(c-3.5);
+      // Menor dist => mais penalidade
+      return Math.round((6 - distToCenter) * 8); // ~0..48
+    },
+
+    evaluate(st){
+      // Avaliação do ponto de vista das brancas (positivo=brancas melhores)
+      let score = 0;
+
+      // material + centro
+      for(let sq=0;sq<64;sq++){
+        const p = st.cells[sq];
+        if(!p) continue;
+        const v = this.pieceValue(p);
+        const cb = this.centerBonus(sq);
+        if(isWhitePiece(p)) score += v + cb;
+        else score -= v + cb;
+      }
+
+      // mobilidade (legal moves count)
+      const side = st.sideToMove;
+      const stW = clone(st); stW.sideToMove='w';
+      const stB = clone(st); stB.sideToMove='b';
+      const mW = MoveGen.generateLegalMoves(stW).length;
+      const mB = MoveGen.generateLegalMoves(stB).length;
+      score += (mW - mB) * 2;
+
+      // rei exposto (pequeno)
+      score -= this.kingSafetyPenalty('w', st);
+      score += this.kingSafetyPenalty('b', st);
+
+      return score;
+    },
+
+    // MVV-LVA: Most Valuable Victim - Least Valuable Attacker
+    moveOrderScore(mv){
+      let s = 0;
+      if(mv.capture){
+        s += 10000;
+        s += this.pieceValue(mv.capture) * 10;
+        s -= this.pieceValue(mv.piece);
+      }
+      if(mv.flag === 'promo') s += 9000;
+      if(mv.flag === 'castleK' || mv.flag === 'castleQ') s += 50;
+      // Centro
+      s += this.centerBonus(mv.to);
+      return s;
+    },
+
+    // Quiescence: estende apenas capturas para reduzir horizonte
+    quiescence(st, alpha, beta){
+      const standPat = this.evaluate(st);
+      if(standPat >= beta) return beta;
+      if(alpha < standPat) alpha = standPat;
+
+      // Somente capturas legais
+      const moves = MoveGen.generateLegalMoves(st).filter(m => m.capture);
+      moves.sort((a,b)=>this.moveOrderScore(b)-this.moveOrderScore(a));
+
+      for(const mv of moves){
+        const st2 = clone(st);
+        Rules.applyMove(mv, st2);
+        const score = -this.quiescence(st2, -beta, -alpha);
+        if(score >= beta) return beta;
+        if(score > alpha) alpha = score;
+      }
+      return alpha;
+    },
+
+    // Negamax com alpha-beta
+    search(st, depth, alpha, beta){
+      const color = st.sideToMove;
+
+      // Terminal: mate/stalemate/insuf material
+      const legal = MoveGen.generateLegalMoves(st);
+      if(depth === 0){
+        // quiescence
+        return this.quiescence(st, alpha, beta);
+      }
+
+      if(legal.length === 0){
+        // se está em cheque: mate
+        if(Rules.inCheck(color, st)){
+          // mate: pontuação muito baixa para o lado a jogar
+          return -999999 + (4-depth); // preferir mate mais rápido
+        }
+        // stalemate
+        return 0;
+      }
+
+      if(Rules.isInsufficientMaterial(st)) return 0;
+
+      // Ordenação
+      legal.sort((a,b)=>this.moveOrderScore(b)-this.moveOrderScore(a));
+
+      let best = -Infinity;
+      for(const mv of legal){
+        const st2 = clone(st);
+        Rules.applyMove(mv, st2);
+        const score = -this.search(st2, depth-1, -beta, -alpha);
+        if(score > best) best = score;
+        if(score > alpha) alpha = score;
+        if(alpha >= beta) break; // cut-off
+      }
+      return best;
+    },
+
+    bestMove(st, depth){
+      const legal = MoveGen.generateLegalMoves(st);
+      if(legal.length === 0) return null;
+      legal.sort((a,b)=>this.moveOrderScore(b)-this.moveOrderScore(a));
+
+      let bestMv = legal[0];
+      let bestScore = -Infinity;
+      let alpha = -Infinity, beta = Infinity;
+
+      for(const mv of legal){
+        const st2 = clone(st);
+        Rules.applyMove(mv, st2);
+        const score = -this.search(st2, depth-1, -beta, -alpha);
+        if(score > bestScore){
+          bestScore = score;
+          bestMv = mv;
+        }
+        if(score > alpha) alpha = score;
+      }
+      bestMv._score = bestScore;
+      return bestMv;
+    }
+  };
+
+  /**********************************************************************
+   * UI: render, seleção, hints, histórico
+   **********************************************************************/
+  const UI = {
+    elBoard: document.getElementById('board'),
+    elStatus: document.getElementById('status'),
+    elMoves: document.getElementById('moveList'),
+    elFen: document.getElementById('fenBox'),
+    modeSelect: document.getElementById('modeSelect'),
+    depthSelect: document.getElementById('depthSelect'),
+    modeBadge: document.getElementById('modeBadge'),
+
+    newBtn: document.getElementById('newBtn'),
+    undoBtn: document.getElementById('undoBtn'),
+    redoBtn: document.getElementById('redoBtn'),
+    flipBtn: document.getElementById('flipBtn'),
+
+    promoBackdrop: document.getElementById('promoBackdrop'),
+    promoChoices: document.getElementById('promoChoices'),
+
+    flipped: false,
+
+    selectedSq: null,
+    legalMovesCache: [],
+    hints: new Map(), // toSq -> move
+
+    moveHistorySAN: [],
+
+    init(){
+      this.buildBoard();
+      this.bindControls();
+      this.refreshAll();
+    },
+
+    buildBoard(){
+      // Grade: col 0 = coord esquerda (8..1), row 8 = coord inferior (a..h)
+      this.elBoard.innerHTML = "";
+
+      // 8 linhas de casas + gutter esquerdo
+      for(let r=0;r<8;r++){
+        // coord esquerda
+        const coord = document.createElement('div');
+        coord.className = 'coord-left';
+        coord.textContent = String(8 - r);
+        this.elBoard.appendChild(coord);
+
+        for(let c=0;c<8;c++){
+          const sq = rcToSq(r,c);
+          const sqEl = document.createElement('div');
+          sqEl.className = 'sq ' + (((r+c)%2===0) ? 'light' : 'dark');
+          sqEl.dataset.sq = String(sq);
+          sqEl.addEventListener('click', () => this.onSquareClick(sq));
+          this.elBoard.appendChild(sqEl);
+        }
+      }
+
+      // bottom coordinates row
+      const blank = document.createElement('div');
+      blank.className = 'coord-bottom';
+      blank.textContent = "";
+      this.elBoard.appendChild(blank);
+
+      for(let c=0;c<8;c++){
+        const coord = document.createElement('div');
+        coord.className = 'coord-bottom';
+        coord.textContent = FILES[c];
+        this.elBoard.appendChild(coord);
+      }
+    },
+
+    bindControls(){
+      this.newBtn.addEventListener('click', () => {
+        Board.reset();
+        this.moveHistorySAN = [];
+        this.clearSelection();
+        this.refreshAll();
+        Game.maybeAIMove();
+      });
+
+      this.undoBtn.addEventListener('click', () => {
+        if(Board.undo()){
+          // removemos 1 ply do histórico textual também, mas cuidado com undo múltiplo.
+          // Como usamos snapshots, vamos recalcular histórico a partir do stack (mais robusto).
+          this.rebuildMoveListFromSnapshots();
+          this.clearSelection();
+          this.refreshAll();
+        }
+      });
+
+      this.redoBtn.addEventListener('click', () => {
+        if(Board.redo()){
+          this.rebuildMoveListFromSnapshots();
+          this.clearSelection();
+          this.refreshAll();
+          Game.maybeAIMove();
+        }
+      });
+
+      this.flipBtn.addEventListener('click', () => {
+        this.flipped = !this.flipped;
+        this.refreshBoard();
+      });
+
+      this.modeSelect.addEventListener('change', () => {
+        Game.mode = this.modeSelect.value;
+        this.updateModeBadge();
+        this.clearSelection();
+        this.refreshAll();
+        Game.maybeAIMove();
+      });
+
+      this.depthSelect.addEventListener('change', () => {
+        Game.aiDepth = parseInt(this.depthSelect.value,10);
+      });
+
+      this.updateModeBadge();
+    },
+
+    updateModeBadge(){
+      const m = this.modeSelect.value;
+      const txt = ({
+        hva: "Humano vs IA",
+        hvh: "Humano vs Humano",
+        avh: "IA vs Humano",
+        ava: "IA vs IA"
+      })[m] || "Humano vs IA";
+      this.modeBadge.textContent = txt;
+    },
+
+    squareEls(){
+      return Array.from(this.elBoard.querySelectorAll('.sq'));
+    },
+
+    getSqElBySq(sq){
+      return this.elBoard.querySelector(`.sq[data-sq="${sq}"]`);
+    },
+
+    refreshAll(){
+      this.refreshBoard();
+      this.refreshStatus();
+      this.refreshFen();
+      this.refreshMoves();
+    },
+
+    refreshBoard(){
+      // Render peças e classes de seleção/hints
+      const st = Board.state;
+      const sqEls = this.squareEls();
+
+      // Ajustar orientação (flipped): vamos mapear exibição->square real
+      // Simples: re-render com transformação lógica de qual peça fica em cada elemento.
+      // Como cada elemento tem data-sq fixo (0..63), quando flipped, exibimos a peça do sq espelhado.
+      for(const el of sqEls){
+        const displaySq = parseInt(el.dataset.sq,10);
+        const realSq = this.flipped ? this.flipSq(displaySq) : displaySq;
+        const p = st.cells[realSq];
+        el.textContent = p ? PIECE_UNICODE[p] : "";
+        el.classList.remove('selected','hint','capture','incheck');
+      }
+
+      // Coordenadas também deveriam virar: simplificamos e mantemos a/1 sempre (ok estética).
+      // Destaques
+      if(this.selectedSq !== null){
+        const selEl = this.getSqElBySq(this.flipped ? this.unflipSq(this.selectedSq) : this.selectedSq);
+        if(selEl) selEl.classList.add('selected');
+      }
+      // Hints
+      for(const [toSq, mv] of this.hints.entries()){
+        const dispTo = this.flipped ? this.unflipSq(toSq) : toSq;
+        const el = this.getSqElBySq(dispTo);
+        if(el){
+          el.classList.add('hint');
+          if(mv.capture) el.classList.add('capture');
+        }
+      }
+      // Rei em cheque pisca
+      const side = st.sideToMove;
+      if(Rules.inCheck(side, st)){
+        const ksq = Rules.kingSquare(side, st);
+        if(ksq !== null){
+          const dispK = this.flipped ? this.unflipSq(ksq) : ksq;
+          const el = this.getSqElBySq(dispK);
+          if(el) el.classList.add('incheck');
+        }
+      }
+    },
+
+    flipSq(sq){
+      // espelha no tabuleiro: (r,c)->(7-r,7-c)
+      const [r,c]=sqToRC(sq);
+      return rcToSq(7-r, 7-c);
+    },
+    unflipSq(sq){
+      // mesma função (involutiva)
+      return this.flipSq(sq);
+    },
+
+    refreshStatus(){
+      const st = Board.state;
+      const side = st.sideToMove === 'w' ? "Brancas" : "Pretas";
+      const legal = MoveGen.generateLegalMoves(st);
+      const inCheck = Rules.inCheck(st.sideToMove, st);
+
+      let text = `<b>Vez:</b> ${side}. `;
+      if(inCheck) text += `<b>Cheque!</b> `;
+
+      if(legal.length === 0){
+        if(inCheck){
+          text += `<b>Cheque-mate.</b> ${side} sem movimentos legais.`;
+        } else {
+          text += `<b>Afogamento (stalemate).</b> ${side} sem movimentos legais.`;
+        }
+      } else if(Rules.isInsufficientMaterial(st)){
+        text += `<b>Empate por material insuficiente.</b>`;
+      }
+
+      // Info IA
+      const aiInfo = Game.aiSide() ? ` IA joga: <b>${Game.aiSide()==='w'?'Brancas':'Pretas'}</b>.` : '';
+      text += aiInfo;
+
+      this.elStatus.innerHTML = text;
+    },
+
+    refreshFen(){
+      this.elFen.textContent = "FEN: " + Board.fen();
+    },
+
+    refreshMoves(){
+      this.elMoves.innerHTML = "";
+      for(const m of this.moveHistorySAN){
+        const li = document.createElement('li');
+        li.textContent = m;
+        this.elMoves.appendChild(li);
+      }
+    },
+
+    clearSelection(){
+      this.selectedSq = null;
+      this.hints.clear();
+      this.legalMovesCache = [];
+      this.refreshBoard();
+    },
+
+    onSquareClick(displaySq){
+      if(Game.isBusy) return;
+      const st = Board.state;
+
+      // Traduz displaySq->realSq se flipped
+      const sq = this.flipped ? this.flipSq(displaySq) : displaySq;
+
+      // Se IA deve jogar e é o turno dela, ignore cliques humanos
+      if(Game.isAITurn()) return;
+
+      const p = st.cells[sq];
+      const side = st.sideToMove;
+
+      const isUs = (p) => p && ((side==='w') ? isWhitePiece(p) : isBlackPiece(p));
+
+      // Se já tem selecionado e clique é um destino válido => mover
+      if(this.selectedSq !== null){
+        if(this.hints.has(sq)){
+          const mv = this.hints.get(sq);
+          this.tryMakeMoveWithPromotion(mv);
+          return;
+        }
+      }
+
+      // Selecionar uma peça do lado a jogar
+      if(isUs(p)){
+        this.selectedSq = sq;
+        this.legalMovesCache = MoveGen.generateLegalMoves(st);
+        this.hints.clear();
+
+        // Mapear destinos legais para essa origem
+        for(const mv of this.legalMovesCache){
+          if(mv.from === sq){
+            this.hints.set(mv.to, mv);
+          }
+        }
+        this.refreshBoard();
+      } else {
+        this.clearSelection();
+      }
+    },
+
+    tryMakeMoveWithPromotion(mv){
+      // Se for promoção, abrir modal de escolha (UI)
+      if(mv.flag === 'promo'){
+        this.openPromotionModal(mv);
+      } else {
+        this.commitMove(mv);
+      }
+    },
+
+    openPromotionModal(mv){
+      // Monta botões de promoção
+      this.promoChoices.innerHTML = "";
+      const side = Board.state.sideToMove;
+      const choices = (side==='w') ? ['Q','R','B','N'] : ['q','r','b','n'];
+      const label = (p)=>PIECE_UNICODE[p];
+
+      const finalize = (promoPiece) => {
+        this.closePromotionModal();
+        const mv2 = {...mv, promotion: promoPiece};
+        this.commitMove(mv2);
+      };
+
+      for(const p of choices){
+        const b = document.createElement('button');
+        b.textContent = label(p);
+        b.addEventListener('click', () => finalize(p));
+        this.promoChoices.appendChild(b);
+      }
+
+      this.promoBackdrop.style.display = "flex";
+      // clique fora fecha? não, porque precisa escolher; mas deixamos escape via backdrop click
+      this.promoBackdrop.onclick = (e) => {
+        if(e.target === this.promoBackdrop){
+          // padrão: escolhe dama
+          finalize(choices[0]);
+        }
+      };
+    },
+
+    closePromotionModal(){
+      this.promoBackdrop.style.display = "none";
+      this.promoBackdrop.onclick = null;
+    },
+
+    commitMove(mv){
+      // Snapshot para undo/redo
+      Board.pushHistory();
+
+      // Aplicar
+      const st = Board.state;
+      Rules.applyMove(mv, st);
+
+      // Atualiza histórico textual simples (UCI-like: e2e4, promoção: e7e8q)
+      this.moveHistorySAN.push(this.moveToText(mv));
+
+      this.clearSelection();
+      this.refreshAll();
+
+      // Depois do movimento humano, talvez IA jogue
+      Game.maybeAIMove();
+    },
+
+    moveToText(mv){
+      // formato "e2e4" / "e1g1" / "e7e8q" / "e5d6ep" (vamos simplificar)
+      const a = sqToCoord(mv.from);
+      const b = sqToCoord(mv.to);
+      let suf = "";
+      if(mv.flag === 'promo' && mv.promotion) suf = mv.promotion.toLowerCase();
+      else if(mv.flag === 'ep') suf = "ep";
+      return a + b + suf;
+    },
+
+    rebuildMoveListFromSnapshots(){
+      // Como estamos usando snapshots, a lista textual pode ficar incorreta após undo/redo.
+      // Solução simples: reconstruir movelist a partir das diferenças de snapshots.
+      // Para simplicidade e robustez, vamos zerar e usar um "replay" detectando o move
+      // com base na história (não perfeito para promo/ep), então preferimos:
+      // - manter uma lista paralela também em snapshots. Aqui vamos fazer um método mais seguro:
+      // guardar movelist junto com snapshot não foi implementado, então faremos o melhor esforço:
+      // => Se você quer fidelidade total pós-undo/redo, use a lista como "log aproximado".
+      // Para não enganar, aqui apenas truncamos para tamanho aproximado.
+      const plyCount = Board.history.length ? (Board.history.length) : 0;
+      // plyCount é número de posições salvas antes de cada jogada aplicada.
+      // A posição atual é depois de N jogadas (N = history length original - ???).
+      // Não temos N diretamente. Então faremos:
+      // moveHistorySAN size = history length? (cada commitMove faz pushHistory antes)
+      // undo() move um snapshot para future, então history length diminui 1 mas movelist não.
+      // => Podemos ajustar a lista para history length, que equivale ao número de jogadas feitas.
+      const target = Board.history.length;
+      this.moveHistorySAN = this.moveHistorySAN.slice(0, target);
+      this.refreshMoves();
+    }
+  };
+
+  /**********************************************************************
+   * Game controller: modos, turno da IA, loop IA vs IA
+   **********************************************************************/
+  const Game = {
+    mode: 'hva', // hva/hvh/avh/ava
+    aiDepth: 3,
+    isBusy: false,
+
+    aiSide(){
+      switch(this.mode){
+        case 'hva': return 'b';
+        case 'avh': return 'w';
+        case 'ava': return 'w'; // ambos: controlaremos ambos
+        default: return null;
+      }
+    },
+
+    isAITurn(){
+      const st = Board.state;
+      if(this.mode === 'hvh') return false;
+      if(this.mode === 'ava') return true;
+      const ai = this.aiSide();
+      return ai === st.sideToMove;
+    },
+
+    maybeAIMove(){
+      // Se jogo acabou, não fazer nada
+      const st = Board.state;
+      const legal = MoveGen.generateLegalMoves(st);
+      if(legal.length === 0 || Rules.isInsufficientMaterial(st)) return;
+
+      if(!this.isAITurn()) return;
+
+      // IA vs IA: fazer em loop com pequeno delay
+      this.isBusy = true;
+      setTimeout(() => {
+        try{
+          const depth = this.aiDepth;
+          const mv = Engine.bestMove(st, depth);
+          if(!mv){
+            this.isBusy=false;
+            UI.refreshAll();
+            return;
+          }
+          // Se promoção e ainda sem promoção selecionada (engine sempre seta), garantir
+          if(mv.flag === 'promo' && !mv.promotion){
+            mv.promotion = (st.sideToMove==='w') ? 'Q' : 'q';
+          }
+
+          Board.pushHistory();
+          Rules.applyMove(mv, st);
+          UI.moveHistorySAN.push(UI.moveToText(mv));
+          UI.clearSelection();
+          UI.refreshAll();
+        } finally {
+          this.isBusy = false;
+          // continua se IA vs IA
+          if(this.mode === 'ava'){
+            this.maybeAIMove();
+          }
+        }
+      }, 30);
+    }
+  };
+
+  /**********************************************************************
+   * Expor um namespace Chess para debug no console
+   **********************************************************************/
+  const Chess = {
+    Board, Rules, MoveGen, Engine, UI, Game,
+    // Testes rápidos (console):
+    // - roque inválido passando por cheque
+    // - en passant básico
+    // - mate em 1 simples
+    debugTests(){
+      console.log("FEN atual:", Board.fen());
+      console.log("Legal moves:", MoveGen.generateLegalMoves(Board.state).length);
+
+      // Teste en passant: configurar posição rápida
+      // Posição: brancas peão em e5, pretas peão em d7, pretas a jogar e faz d7d5, brancas pode exd6 ep
+      const st = Board.state;
+      Board.pushHistory();
+      st.cells = Array(64).fill(null);
+      st.sideToMove='b';
+      st.castling={K:false,Q:false,k:false,q:false};
+      st.enPassant=null; st.halfmove=0; st.fullmove=1;
+      // Reis
+      st.cells[coordToSq('e1')] = 'K';
+      st.cells[coordToSq('e8')] = 'k';
+      // Peões
+      st.cells[coordToSq('e5')] = 'P';
+      st.cells[coordToSq('d7')] = 'p';
+
+      const legalB = MoveGen.generateLegalMoves(st);
+      const mvD7D5 = legalB.find(m => sqToCoord(m.from)==='d7' && sqToCoord(m.to)==='d5');
+      console.assert(!!mvD7D5, "Pretas deveriam poder jogar d7d5");
+      Rules.applyMove(mvD7D5, st);
+
+      const legalW = MoveGen.generateLegalMoves(st);
+      const ep = legalW.find(m => m.flag==='ep');
+      console.assert(!!ep, "Brancas deveriam ter en passant disponível");
+      console.log("Teste EP OK:", ep && (sqToCoord(ep.from)+sqToCoord(ep.to)));
+
+      // Voltar ao estado anterior
+      Board.undo();
+      UI.refreshAll();
+
+      console.log("debugTests concluído.");
+    }
+  };
+  window.Chess = Chess;
+
+  /**********************************************************************
+   * Start
+   **********************************************************************/
+  Board.reset();
+  UI.init();
+
+  // Ajustar inicial
+  Game.mode = UI.modeSelect.value;
+  Game.aiDepth = parseInt(UI.depthSelect.value,10);
+  UI.updateModeBadge();
+  UI.refreshAll();
+  Game.maybeAIMove();
+})();
+</script>
+</body>
+</html>
